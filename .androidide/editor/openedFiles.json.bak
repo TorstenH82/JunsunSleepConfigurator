@@ -1,0 +1,20 @@
+{
+  "allFiles": [
+    {
+      "file": "/storage/emulated/0/AppProjects/JunsunSleepConfigurator/app/src/main/res/layout/item_apply.xml",
+      "selection": {
+        "end": {
+          "column": 54,
+          "index": -1,
+          "line": 7
+        },
+        "start": {
+          "column": 54,
+          "index": -1,
+          "line": 7
+        }
+      }
+    }
+  ],
+  "selectedFile": "/storage/emulated/0/AppProjects/JunsunSleepConfigurator/app/src/main/res/layout/item_apply.xml"
+}

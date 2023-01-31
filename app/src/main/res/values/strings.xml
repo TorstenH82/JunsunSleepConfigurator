@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="DEBUG">false</string>
+    <string name="app_name">JunsunSleepConfigurator</string>
+    <string name="commandAllowWakelock">cmd appops set %s WAKE_LOCK allow</string>
+    <string name="commandChmod" formatted="false">chmod 644 %s</string>
+    <string name="commandChown" formatted="false">chown %s.%s %s</string>
+    <string name="commandCopy" formatted="false">cp -p %s %s</string>
+    <string name="commandIgnoreWakelock">cmd appops set %s WAKE_LOCK ignore</string>
+    <string name="commandRemount1">mount -o rw,remount /vendor</string>
+    <string name="commandRemount2">remount /vendor</string>
+    <string name="copy">Copy</string>
+    <string name="fileQbListXml">qb_list.xml</string>
+    <string name="no">Cancel</string>
+    <string name="pathToQblistXml">/vendor/etc</string>
+    <string name="pathToQblistXml_debug">/storage/emulated/0</string>
+    <string name="rootAppDir">SleepConfigurator</string>
+    <string name="su">su @#zxcvbnmasdfghjklqwertyuiop1234567890,.</string>
+    <string name="tagEnd">added by JunsunSleepConfigurator - END</string>
+    <string name="tagStart">added by JunsunSleepConfigurator - START</string>
+    <string name="yes">OK</string>
+</resources>
