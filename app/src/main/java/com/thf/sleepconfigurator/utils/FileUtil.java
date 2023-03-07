@@ -2,19 +2,13 @@ package com.thf.sleepconfigurator.utils;
 
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.os.Environment;
-import android.os.FileUtils;
-import android.text.TextUtils;
 import android.util.Log;
+import android.util.Xml;
 import com.thf.sleepconfigurator.R;
 import com.thf.sleepconfigurator.SleepConfiguratorApp;
-import com.thf.sleepconfigurator.utils.AppData;
-import com.thf.sleepconfigurator.utils.FileUtil;
 import java.io.BufferedReader;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
+import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.FilenameFilter;
@@ -23,27 +17,25 @@ import java.io.PrintWriter;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import kotlin.reflect.KCallable;
+import org.xmlpull.v1.XmlPullParser;
 
 /* loaded from: classes.dex */
 public class FileUtil {
     private static final int ACTION_ALLOW = 1;
     private static final int ACTION_IGNORE = 0;
     private static final String TAG = "SleepConfigurator";
-    private static List<AppData> addedPackagesList = new ArrayList();
-    private static List<AppData> packagesList;
+    private static List<AppData> addedPackagesList = new ArrayList<AppData>();
+    private static List<AppData> packagesList = new ArrayList<AppData>();
     private static Context context;
     private static String pathQbListBackupCopy;
     private static int startTagPosition = -1;
     private static int endTagPosition = -1;
     private static int closingTagPosition = -1;
-    private static List<String> log = new ArrayList();
+    private static List<String> log = new ArrayList<String>();
     private static String pathModFile;
 
     /* loaded from: classes.dex */
@@ -111,7 +103,7 @@ public class FileUtil {
     }
 
     public static void resetAddedPackagesList() {
-        addedPackagesList = new ArrayList();
+        addedPackagesList = new ArrayList<AppData>();
     }
 
     public static List<AppData> getPackagesList() {
@@ -126,7 +118,7 @@ public class FileUtil {
         pathModFile = path;
     }
 
-    private static String getPathQbList() {
+    public static String getFilePathQbList() {
         if (SleepConfiguratorApp.DEBUG) {
             return context.getExternalFilesDir(null)
                     + "/"
@@ -137,18 +129,17 @@ public class FileUtil {
                 + context.getString(R.string.fileQbListXml);
     }
 
-    private static String getPathQbListBackupCopy() {
+    public static String getPathQbListBackup() {
         return context.getExternalFilesDir(null) + "/backups";
     }
 
-    private static String getFilePathQbListBackupCopy() {
-
+    public static String getFilePathQbListBackupCopy() {
         String str =
                 LocalDateTime.now()
                         .format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
                         .toString();
         pathQbListBackupCopy =
-                getPathQbListBackupCopy()
+                getPathQbListBackup()
                         + "/"
                         + str
                         + "__"
@@ -157,59 +148,19 @@ public class FileUtil {
         return pathQbListBackupCopy;
     }
 
-    private static String getPathSpecificBackupCopy(String str) {
-        return Environment.getExternalStorageDirectory()
-                + "/"
-                + context.getString(R.string.rootAppDir)
-                + "/"
-                + str;
-    }
-
-    public static void createBackup() throws BackupCopyException {
-        createDirectory(context.getExternalFilesDir(null) + "/backups");
-
-        if (SleepConfiguratorApp.DEBUG) {
-            try {
-                FileUtils.copy(
-                        new FileInputStream(getPathQbList()),
-                        new FileOutputStream(getFilePathQbListBackupCopy()));
-            } catch (IOException e) {
-                throw new BackupCopyException(
-                        "DEBUG: Error creating backup copy of configuration file: "
-                                + e.getMessage());
-            }
-        } else {
-            String format =
-                    String.format(
-                            context.getString(R.string.commandCopy),
-                            getPathQbList(),
-                            getFilePathQbListBackupCopy());
-            log.add("executing su command: " + format);
-            try {
-                execSuCommand(format);
-            } catch (SuCommandException e2) {
-                throw new BackupCopyException("Error executing su command: " + e2.getMessage());
-            }
-        }
-        if (!new File(getPathQbListBackupCopy()).exists()) {
-            throw new BackupCopyException(
-                    "Backup file '" + getPathQbListBackupCopy() + "' does not exist");
-        }
-        log.add("created backup of config file here: " + getPathQbListBackupCopy());
-    }
-
-    public static boolean modifyWorkingConfigFile() throws ModifyFileException {
+    public static String modifyWorkingConfigFile() throws ModifyFileException {
 
         String message, line;
         String startTag = context.getString(R.string.tagStart);
         String endTag = context.getString(R.string.tagEnd);
         Pattern pattern = Pattern.compile("\"(.+?)\"", Pattern.DOTALL);
+        boolean createNewFile = false;
 
         // remove entries we can not change
         List<AppData> packagesSelectedByUser = new ArrayList<>(getPackagesSelectedByUser());
         if (packagesSelectedByUser.isEmpty()) {
             log.add("No need to modify config file...");
-            return false;
+            return null;
         }
 
         try {
@@ -221,240 +172,207 @@ public class FileUtil {
                 }
             }
         } catch (ReadFileException ex) {
+            log.add("Can't read existing config file. New file will be created...");
+            createNewFile = true;
         }
 
+        File fileTmp = new File(context.getExternalFilesDir(null) + "/qb_list_mod.xml");
+        setPathModified(fileTmp.getAbsolutePath());
+        log.add("temporary file: " + fileTmp.getAbsolutePath());
+
         try {
-            File fileWc = new File(getPathQbList());
-            File fileTmp = new File(context.getExternalFilesDir(null) + "/qb_list_mod.xml");
-            setPathModified(fileTmp.getAbsolutePath());
-            log.add("temporary file: " + fileTmp.getAbsolutePath());
-
-            BufferedReader br = new BufferedReader(new FileReader(fileWc.getAbsolutePath()));
             PrintWriter pw = new PrintWriter(new FileWriter(fileTmp));
+            if (createNewFile) {
+                pw.println("<qb_list>");
+                pw.println("\t<!--" + startTag + "-->");
+                for (AppData app : packagesSelectedByUser) {
+                    if (app.getListColor().equals(AppData.LIST_COLOR_WHITE)) {
+                        pw.println("\t<app_whitelist name=\"" + app.getPackageName() + "\" />");
+                        log.add("added " + app.getPackageName() + " to white list");
+                    } else if (app.getListColor().equals(AppData.LIST_COLOR_WHITE)) {
+                        pw.println("\t<app_yellowlist name=\"" + app.getPackageName() + "\" />");
+                        log.add("added " + app.getPackageName() + " to yellow list");
+                    }
+                }
+                pw.println("\t<!--" + endTag + "-->");
+                pw.println("</qb_list>");
+            } else {
 
-            Boolean changeable = false;
-            Boolean writeRemaining = false;
-            Boolean sleepConfiguratorTagFound = false;
+                File fileCfg = new File(getFilePathQbList());
+                BufferedReader br = new BufferedReader(new FileReader(fileCfg.getAbsolutePath()));
 
-            while ((line = br.readLine()) != null) {
-                boolean printLine = true;
+                boolean changeable = false;
+                boolean writeRemaining = false;
+                boolean sleepConfiguratorTagFound = false;
 
-                if (line.contains(startTag)) {
-                    changeable = true;
-                } else if (line.contains(endTag)) {
-                    writeRemaining = true;
-                    sleepConfiguratorTagFound = true;
-                    changeable = false;
-                } else if (line.contains("</qb_list>")) {
-                    if (!sleepConfiguratorTagFound) writeRemaining = true;
-                } else {
-                    if (changeable) {
-                        Matcher matcher = pattern.matcher(line);
-                        if (matcher.find()) {
-                            String pa = matcher.group(1);
-                            AppData paApp = new AppData(pa);
-                            int idx = packagesSelectedByUser.indexOf(paApp);
-                            if (idx != -1) {
+                while ((line = br.readLine()) != null) {
+                    boolean printLine = true;
+                    if (line.contains(startTag)) {
+                        changeable = true;
+                    } else if (line.contains(endTag)) {
+                        writeRemaining = true;
+                        sleepConfiguratorTagFound = true;
+                        changeable = false;
+                    } else if (line.contains("</qb_list>")) {
+                        if (!sleepConfiguratorTagFound) writeRemaining = true;
+                    } else {
+                        if (changeable) {
+                            Matcher matcher = pattern.matcher(line);
+                            if (matcher.find()) {
+                                String pa = matcher.group(1);
+                                AppData paApp = new AppData(pa);
+                                int idx = packagesSelectedByUser.indexOf(paApp);
+                                if (idx != -1) {
 
-                                String paColor = "";
-                                if (line.contains("app_whitelist")) {
-                                    paColor = AppData.LIST_COLOR_WHITE;
-                                } else if (line.contains("app_yellowlist")) {
-                                    paColor = AppData.LIST_COLOR_YELLOW;
-                                }
-
-                                AppData paAdd = packagesSelectedByUser.get(idx);
-                                String paAddColor = paAdd.getListColor();
-
-                                if (changeable && !paColor.equals(paAddColor)) {
-                                    printLine = false;
-                                    if (paAddColor.equals(AppData.LIST_COLOR_WHITE)) {
-                                        pw.println(
-                                                "\t<app_whitelist name=\""
-                                                        + paAdd.getPackageName()
-                                                        + "\" />");
-                                        log.add(
-                                                "added "
-                                                        + paAdd.getPackageName()
-                                                        + " to white list");
-                                    } else if (paAddColor.equals(AppData.LIST_COLOR_YELLOW)) {
-                                        pw.println(
-                                                "\t<app_yellowlist name=\""
-                                                        + paAdd.getPackageName()
-                                                        + "\" />");
-                                        log.add(
-                                                "added x"
-                                                        + paAdd.getPackageName()
-                                                        + " to yellow list");
-                                    } else {
-                                        log.add("removed " + paAdd.getPackageName() + " from list");
+                                    String paColor = "";
+                                    if (line.contains("app_whitelist")) {
+                                        paColor = AppData.LIST_COLOR_WHITE;
+                                    } else if (line.contains("app_yellowlist")) {
+                                        paColor = AppData.LIST_COLOR_YELLOW;
                                     }
-                                }
 
-                                packagesSelectedByUser.remove(paAdd);
+                                    AppData paAdd = packagesSelectedByUser.get(idx);
+                                    String paAddColor = paAdd.getListColor();
+
+                                    if (changeable && !paColor.equals(paAddColor)) {
+                                        printLine = false;
+                                        if (paAddColor.equals(AppData.LIST_COLOR_WHITE)) {
+                                            pw.println(
+                                                    "\t<app_whitelist name=\""
+                                                            + paAdd.getPackageName()
+                                                            + "\" />");
+                                            log.add(
+                                                    "added "
+                                                            + paAdd.getPackageName()
+                                                            + " to white list");
+                                        } else if (paAddColor.equals(AppData.LIST_COLOR_YELLOW)) {
+                                            pw.println(
+                                                    "\t<app_yellowlist name=\""
+                                                            + paAdd.getPackageName()
+                                                            + "\" />");
+                                            log.add(
+                                                    "added "
+                                                            + paAdd.getPackageName()
+                                                            + " to yellow list");
+                                        } else {
+                                            log.add(
+                                                    "removed "
+                                                            + paAdd.getPackageName()
+                                                            + " from list");
+                                        }
+                                    }
+
+                                    packagesSelectedByUser.remove(paAdd);
+                                }
                             }
                         }
                     }
-                }
 
-                if (writeRemaining) {
+                    if (writeRemaining) {
+                        if (!sleepConfiguratorTagFound) pw.println("\t<!--" + startTag + "-->");
 
-                    if (!sleepConfiguratorTagFound) pw.println("\t<!--" + startTag + "-->");
-
-                    for (AppData app : packagesSelectedByUser) {
-                        if (app.getListColor().equals(AppData.LIST_COLOR_WHITE)) {
-                            pw.println("\t<app_whitelist name=\"" + app.getPackageName() + "\" />");
-                            log.add("added " + app.getPackageName() + " to xwhite list");
-                        } else if (app.getListColor().equals(AppData.LIST_COLOR_WHITE)) {
-                            pw.println(
-                                    "\t<app_yellowlist name=\"" + app.getPackageName() + "\" />");
-                            log.add("added " + app.getPackageName() + " to yellow list");
+                        for (AppData app : packagesSelectedByUser) {
+                            if (app.getListColor().equals(AppData.LIST_COLOR_WHITE)) {
+                                pw.println(
+                                        "\t<app_whitelist name=\""
+                                                + app.getPackageName()
+                                                + "\" />");
+                                log.add("added " + app.getPackageName() + " to white list");
+                            } else if (app.getListColor().equals(AppData.LIST_COLOR_WHITE)) {
+                                pw.println(
+                                        "\t<app_yellowlist name=\""
+                                                + app.getPackageName()
+                                                + "\" />");
+                                log.add("added " + app.getPackageName() + " to yellow list");
+                            }
                         }
-                    }
 
-                    if (!sleepConfiguratorTagFound) pw.println("\t<!--" + endTag + "-->");
-                    writeRemaining = false;
+                        if (!sleepConfiguratorTagFound) pw.println("\t<!--" + endTag + "-->");
+                        writeRemaining = false;
+                    }
+                    if (printLine) pw.println(line);
                 }
 
-                if (printLine) pw.println(line);
+                br.close();
             }
-
             pw.close();
-            br.close();
 
         } catch (IOException iOException) {
             message = "IOException: " + iOException.getMessage();
             throw new ModifyFileException(message);
         }
 
-        return true;
+        return fileTmp.getAbsolutePath();
     }
 
     public static List<String> getLog() {
-        ArrayList arrayList = new ArrayList(log);
-        log = new ArrayList();
+        ArrayList<String> arrayList = new ArrayList<String>(log);
+        log = new ArrayList<String>();
         return arrayList;
     }
 
-    public static void overwriteQbList() throws OverwriteQbListException {
-        if (SleepConfiguratorApp.DEBUG) {
-            try {
-                FileUtils.copy(
-                        new FileInputStream(getPathModified()),
-                        new FileOutputStream(getPathQbList()));
-                Log.d(TAG, "DEBUG: overwritten config file with working copy: " + getPathQbList());
-                return;
-            } catch (IOException e) {
-                throw new OverwriteQbListException(
-                        "DEBUG: Error overwriting configuration file with working copy: "
-                                + e.getMessage());
-            }
-        }
-
-        log.add("Remount /vendor partition...");
-        try {
-            execSuCommand(context.getString(R.string.commandRemount1));
-        } catch (SuCommandException ignore) {
-
-        }
-
-        String command = context.getString(R.string.commandRemount2);
-        try {
-            execSuCommand(command);
-        } catch (SuCommandException ex) {
-            log.add("Error during remount with command: " + command);
-            if (!SleepConfiguratorApp.DEBUG)
-                throw new OverwriteQbListException(
-                        "Error executing su command: " + ex.getMessage());
-        }
-
-        command =
-                String.format(
-                        context.getString(R.string.commandCopy),
-                        getPathModified(),
-                        getPathQbList());
-        Log.d(TAG, "Copy to target: " + command);
-        try {
-            execSuCommand(command);
-        } catch (SuCommandException ex) {
-            log.add("Error during copy command: " + command);
-            if (!SleepConfiguratorApp.DEBUG)
-                throw new OverwriteQbListException(
-                        "Error executing su command: " + ex.getMessage());
-        }
-
-        command = String.format(context.getString(R.string.commandChmod), getPathQbList());
-        Log.d(TAG, "Change file permission: " + command);
-        try {
-            execSuCommand(command);
-        } catch (SuCommandException ex) {
-            log.add("Error during file permission change: " + command);
-            if (!SleepConfiguratorApp.DEBUG)
-                throw new OverwriteQbListException(
-                        "Error executing su command: " + ex.getMessage());
-        }
-    }
-
     public static List<AppData> getPackagesFromFile() throws ReadFileException {
-        String startTag = context.getString(R.string.tagStart);
-        String endTag = context.getString(R.string.tagEnd);
-        List<AppData> arrayList = new ArrayList();
+        List<AppData> arrayList = new ArrayList<AppData>();
         PackageManager packageManager = context.getPackageManager();
-        Pattern compile = Pattern.compile("\"(.+?)\"", 32);
+        boolean setByJsc = false;
         try {
-            BufferedReader br = new BufferedReader(new FileReader(new File(getPathQbList())));
-            int i = 0;
-            String line;
-            boolean z = true;
-            while ((line = br.readLine()) != null) {
+            FileReader fileReader = new FileReader(new File(getFilePathQbList()));
+            try {
+                XmlPullParser newPullParser = Xml.newPullParser();
+                newPullParser.setInput(fileReader);
+                for (int eventType = newPullParser.getEventType();
+                        eventType != 1;
+                        eventType = newPullParser.nextToken()) {
 
-                i++;
-                if (line.contains(startTag)) {
-                    startTagPosition = i;
-                    z = false;
-                } else if (line.contains(endTag)) {
-                    z = true;
-                } else if (TextUtils.equals(
-                        line.trim().replaceAll("\t", AppData.LIST_COLOR_REMOVE), "</qb_list>")) {
-                    closingTagPosition = i;
-                } else if (line.contains("<app_whitelist") || line.contains("<app_yellowlist")) {
-                    if (line.contains("name=") && !line.contains("<!--")) {
-                        Matcher matcher = compile.matcher(line);
-                        if (matcher.find()) {
-                            AppData appData = new AppData(matcher.group(1).trim());
-                            try {
-                                String[] strArr =
-                                        packageManager.getPackageInfo(
-                                                        appData.getPackageName(), 4096)
-                                                .requestedPermissions;
-                                if (strArr != null) {
-                                    appData.setPermissions(strArr);
+                    if (eventType != 0) {
+                        if (eventType == XmlPullParser.COMMENT) {
+                            if (context.getText(R.string.tagStart)
+                                    .equals(newPullParser.getText())) {
+                                setByJsc = true;
+                            } else if (context.getText(R.string.tagEnd)
+                                    .equals(newPullParser.getText())) {
+                                setByJsc = false;
+                            }
+                        } else if (eventType == 2) {
+                            String name = newPullParser.getName();
+                            if (name.equals("app_whitelist") || name.equals("app_yellowlist")) {
+
+                                AppData appData =
+                                        new AppData(
+                                                newPullParser.getAttributeValue(
+                                                        (String) null, "name"));
+                                try {
+                                    String[] strArr =
+                                            packageManager.getPackageInfo(
+                                                            appData.getPackageName(), 4096)
+                                                    .requestedPermissions;
+                                    if (strArr != null) {
+                                        appData.setPermissions(strArr);
+                                    }
+                                } catch (PackageManager.NameNotFoundException unused) {
                                 }
-                            } catch (PackageManager.NameNotFoundException unused) {
+                                appData.setInFile(true);
+                                appData.setFactoryDefault(!setByJsc);
+                                Log.i(TAG, appData.getPackageName());
+                                if (name.equals("app_whitelist")) {
+                                    appData.setListColor(AppData.LIST_COLOR_WHITE);
+                                } else {
+                                    appData.setListColor(AppData.LIST_COLOR_YELLOW);
+                                }
+                                arrayList.add(appData);
                             }
-                            appData.setInFile(true);
-                            appData.setFactoryDefault(z);
-                            Log.i(TAG, appData.getPackageName());
-                            if (line.contains("<app_whitelist")) {
-                                appData.setListColor(AppData.LIST_COLOR_WHITE);
-                            } else {
-                                appData.setListColor(AppData.LIST_COLOR_YELLOW);
-                            }
-                            arrayList.add(appData);
                         }
                     }
                 }
-                endTagPosition = i;
+
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-            br.close();
-            if (closingTagPosition == -1) {
-                throw new ReadFileException("Closing XML tag not found.");
-            }
-            packagesList = arrayList;
-            return arrayList;
-        } catch (IOException e) {
-            throw new ReadFileException("IOException: " + e.getMessage());
+        } catch (FileNotFoundException ex) {
+            throw new ReadFileException("FileNotFoundException: " + ex.getMessage());
         }
+        packagesList = arrayList;
+        return arrayList;
     }
 
     public static void allowIgnoreWakelocks() throws SetWakelockException {
@@ -488,8 +406,8 @@ public class FileUtil {
                                     appData.getPackageName());
                 }
                 try {
-                    execSuCommand(command);
-                } catch (SuCommandException e) {
+                    SuCommands.sudoForResult(command);
+                } catch (SuCommands.SuCommandException e) {
                     log.add(
                             "error executing su command: "
                                     + command
@@ -510,31 +428,10 @@ public class FileUtil {
         file.mkdir();
     }
 
-    public static void execSuCommand(String str) throws SuCommandException {
-        Boolean.valueOf(false);
-        if (str == null || "".equals(str)) {
-            throw new SuCommandException("command is empty");
-        }
-        try {
-            Process exec = Runtime.getRuntime().exec(context.getString(R.string.su));
-            DataOutputStream dataOutputStream = new DataOutputStream(exec.getOutputStream());
-            if (!TextUtils.equals(str, AppData.LIST_COLOR_REMOVE)) {
-                dataOutputStream.writeBytes(str + "\n");
-                dataOutputStream.flush();
-            }
-            dataOutputStream.writeBytes("exit\n");
-            dataOutputStream.flush();
-            exec.waitFor();
-        } catch (IOException e) {
-            throw new SuCommandException("IOException: " + e.getMessage());
-        } catch (InterruptedException e2) {
-            throw new SuCommandException("InterruotedException: " + e2.getMessage());
-        }
-    }
-
     public static List<String> getAvailableBackupFiles() {
+
         String[] list =
-                new File(getPathQbListBackupCopy())
+                new File(getPathQbListBackup())
                         .list(
                                 new FilenameFilter() { // from class:
                                     // com.thf.sleepconfigurator.utils.FileUtil.1
@@ -543,56 +440,20 @@ public class FileUtil {
                                         return str.endsWith(".xml");
                                     }
                                 });
+
         if (list != null) {
-            List<String> asList = Arrays.asList(list);
+            List<String> asList = new ArrayList<String>();
+            for (String f : list) {
+                File file = new File(getPathQbListBackup() + "/" + f);
+                asList.add(f + " (" + file.length() + ")");
+            }
+
+            // List<String> asList = Arrays.asList(list);
             Collections.sort(asList);
             Collections.reverse(asList);
             return asList;
         }
         return null;
-    }
-
-    public static void restoreBackup(String filename) throws BackupRestoreException {
-
-
-
-        try {
-            execSuCommand(context.getString(R.string.commandRemount1));
-        } catch (SuCommandException ignore) {
-
-        }
-
-        String command = context.getString(R.string.commandRemount2);
-        try {
-            execSuCommand(command);
-        } catch (SuCommandException ex) {
-            log.add("Error during remount with command: " + command);
-            throw new BackupRestoreException(
-                    "Error executing su command: '" + command + "': " + ex.getMessage());
-        }
-        command =
-                String.format(
-                        context.getString(R.string.commandCopy),
-                        getPathQbListBackupCopy() + "/" + filename,
-                        getPathQbList());
-        Log.d(TAG, "Copy to target: " + command);
-        try {
-            execSuCommand(command);
-        } catch (SuCommandException ex) {
-            log.add("Error during copy command: " + command);
-            throw new BackupRestoreException(
-                    "Error executing su command: '" + command + "': " + ex.getMessage());
-        }
-
-        command = String.format(context.getString(R.string.commandChmod), getPathQbList());
-        Log.d(TAG, "Change file permission: " + command);
-        try {
-            execSuCommand(command);
-        } catch (SuCommandException ex) {
-            log.add("Error during file permission change: " + command);
-            throw new BackupRestoreException(
-                    "Error executing su command: '" + command + "': " + ex.getMessage());
-        }
     }
 
     public static void addPackage(AppData appData) {
@@ -617,12 +478,10 @@ public class FileUtil {
         }
         addedPackagesList.add(appData);
     }
-    
-    public static void clearPackagesSelectedByUser()
-        {
-            addedPackagesList.clear();
-        }
-    
+
+    public static void clearPackagesSelectedByUser() {
+        addedPackagesList.clear();
+    }
 
     public int getApplicationUid() {
         try {

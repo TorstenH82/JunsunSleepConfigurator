@@ -10,8 +10,8 @@ android {
         applicationId "com.thf.sleepconfigurator"
         minSdk 21
         targetSdk 30
-        versionCode 141
-        versionName "1.4.1alpha"
+        versionCode 145
+        versionName "1.4.5alpha"
     }
 
     buildTypes {

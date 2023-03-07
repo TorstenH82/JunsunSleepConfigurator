@@ -1,0 +1,65 @@
+{
+  "allFiles": [
+    {
+      "file": "/storage/emulated/0/AppProjects/JunsunSleepConfigurator/app/src/main/java/com/thf/sleepconfigurator/ListActivity.java",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": -1,
+          "line": 0
+        },
+        "start": {
+          "column": 0,
+          "index": -1,
+          "line": 0
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AppProjects/JunsunSleepConfigurator/app/src/main/java/com/thf/sleepconfigurator/utils/FileUtil.java",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": -1,
+          "line": 0
+        },
+        "start": {
+          "column": 0,
+          "index": -1,
+          "line": 0
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AppProjects/JunsunSleepConfigurator/app/src/main/java/com/thf/sleepconfigurator/ApplyActivity.java",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": -1,
+          "line": 0
+        },
+        "start": {
+          "column": 0,
+          "index": -1,
+          "line": 0
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AppProjects/JunsunSleepConfigurator/app/build.gradle",
+      "selection": {
+        "end": {
+          "column": 26,
+          "index": -1,
+          "line": 13
+        },
+        "start": {
+          "column": 21,
+          "index": -1,
+          "line": 13
+        }
+      }
+    }
+  ],
+  "selectedFile": "/storage/emulated/0/AppProjects/JunsunSleepConfigurator/app/build.gradle"
+}

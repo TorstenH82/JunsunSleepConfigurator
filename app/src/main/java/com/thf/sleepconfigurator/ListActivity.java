@@ -13,16 +13,17 @@ import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import com.thf.sleepconfigurator.utils.ActivityUtil;
 import com.thf.sleepconfigurator.utils.AppData;
+import com.thf.sleepconfigurator.utils.AppData;
 import com.thf.sleepconfigurator.utils.FileUtil;
 import com.thf.sleepconfigurator.utils.FlashButton;
 import com.thf.sleepconfigurator.utils.SimpleDialog;
+
 import java.util.ArrayList;
 import java.util.Hashtable;
 import java.util.List;
@@ -115,19 +116,26 @@ public class ListActivity extends AppCompatActivity implements View.OnClickListe
         try {
             this.packagesList = FileUtil.getPackagesFromFile();
         } catch (FileUtil.ReadFileException e) {
-            new SimpleDialog(
-                            this,
-                            new SimpleDialog.SimpleDialogCallbacks() { // from class:
-                                // com.thf.sleepconfigurator.ListActivity.1
-                                @Override // com.thf.sleepconfigurator.utils.SimpleDialog.SimpleDialogCallbacks
-                                public void onClick(boolean z) {
-                                    ListActivity.this.finish();
-                                }
-                            },
-                            "Error reading config file",
-                            e.getMessage(),
-                            false)
-                    .show();
+            if ("Closing XML tag not found".equals(e.getMessage())) {
+                this.packagesList = new ArrayList<AppData>();
+                new SimpleDialog(
+                                this,
+                                "Error reading config file",
+                                "Config file may be corrupt. You can continue but this will create a new file.")
+                        .show();
+            } else {
+                new SimpleDialog(
+                                this,
+                                new SimpleDialog.SimpleDialogCallbacks() {
+                                    @Override
+                                    public void onClick(String identifier, boolean z, String item) {
+                                        ListActivity.this.finish();
+                                    }
+                                },
+                                "Error reading config file",
+                                e.getMessage())
+                        .show();
+            }
         }
         this.au.startProgress();
     }

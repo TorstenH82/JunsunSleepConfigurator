@@ -18,15 +18,14 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-import com.thf.sleepconfigurator.ApplyActivity;
 import com.thf.sleepconfigurator.utils.AppData;
 import com.thf.sleepconfigurator.utils.CustomArrayAdapter;
 import com.thf.sleepconfigurator.utils.FileUtil;
 import com.thf.sleepconfigurator.utils.SimpleDialog;
+import com.thf.sleepconfigurator.utils.SuCommands;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
-import com.thf.sleepconfigurator.R;
 
 /* loaded from: classes.dex */
 public class ApplyActivity extends AppCompatActivity implements View.OnClickListener {
@@ -40,10 +39,11 @@ public class ApplyActivity extends AppCompatActivity implements View.OnClickList
     private ListView listViewLog;
     ArrayAdapter<String> listViewLogArrayAdapter;
     private RecyclerView recyclerView;
-    private List<AppData> packagesList = new ArrayList();
-    private List<AppData> addRemovePackages = new ArrayList();
+    private List<AppData> packagesList = new ArrayList<AppData>();
+    private List<AppData> addRemovePackages = new ArrayList<AppData>();
     private List<String> listLog = new ArrayList();
     private boolean finished = false;
+    private SuCommands suCommands;
 
     @Override // android.app.Activity
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -58,9 +58,11 @@ public class ApplyActivity extends AppCompatActivity implements View.OnClickList
         sleepConfiguratorApp = SleepConfiguratorApp.getInstance();
         this.context = this;
 
+        suCommands = new SuCommands(getString(R.string.su), sleepConfiguratorApp.DEBUG);
+
         setContentView(R.layout.activity_apply);
         getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-        RecyclerView recyclerView = (RecyclerView) findViewById(R.id.listView);
+        recyclerView = (RecyclerView) findViewById(R.id.listView);
         this.recyclerView = recyclerView;
         recyclerView.setHasFixedSize(true);
         this.layoutManager = new LinearLayoutManager(this);
@@ -184,7 +186,7 @@ public class ApplyActivity extends AppCompatActivity implements View.OnClickList
                     myViewHolder.itemTo.setImageDrawable(context.getDrawable(R.drawable.yellow));
                     break;
                 case AppData.LIST_COLOR_REMOVE:
-                    myViewHolder.itemTo.setImageDrawable(context.getDrawable(R.drawable.remove));
+                    myViewHolder.itemTo.setImageDrawable(context.getDrawable(R.drawable.off));
                     break;
                 case AppData.LIST_COLOR_WHITE:
                     myViewHolder.itemTo.setImageDrawable(context.getDrawable(R.drawable.white));
@@ -209,6 +211,116 @@ public class ApplyActivity extends AppCompatActivity implements View.OnClickList
         }
     }
 
+    private String fileToDelete;
+    SimpleDialog.SimpleDialogCallbacks simpleDialogCallbacks =
+            new SimpleDialog.SimpleDialogCallbacks() { // from class:
+                // com.thf.sleepconfigurator.ApplyActivity.1
+                @Override // com.thf.sleepconfigurator.utils.SimpleDialog.SimpleDialogCallbacks
+                public void onClick(String identifier, boolean confirm, String selection) {
+                    String fileModPath;
+                    boolean fileMod = false;
+
+                    if ("INIT".equals(identifier)) {
+                        ApplyActivity.this.listViewLogArrayAdapter.clear();
+                    }
+
+                    if (!confirm) {
+                        ApplyActivity.this.listViewLogArrayAdapter.add("cancelled by user");
+                        return;
+                    }
+
+                    try {
+                        fileModPath = FileUtil.modifyWorkingConfigFile();
+                        ApplyActivity.this.listViewLogArrayAdapter.addAll(FileUtil.getLog());
+                        if (fileModPath != null) {
+                            fileMod = true;
+                            ApplyActivity.this.listViewLogArrayAdapter.add(
+                                    fileModPath + " created");
+                        }
+                    } catch (FileUtil.ModifyFileException ex) {
+                        ApplyActivity.this.listViewLogArrayAdapter.addAll(FileUtil.getLog());
+                        ApplyActivity.this.listViewLogArrayAdapter.add(ex.getMessage());
+                        return;
+                    }
+
+                    if (fileMod) {
+                        try {
+                            if (!suCommands.partitionHasFreeSpace()) {
+
+                                if ("SELECT_DEL".equals(identifier)) {
+                                    new SimpleDialog(
+                                                    ApplyActivity.this,
+                                                    "CONFIRM_DEL",
+                                                    this,
+                                                    "Select file to delete",
+                                                    suCommands.getDeletionVictims())
+                                            .show();
+                                    return;
+                                } else if ("CONFIRM_DEL".equals(identifier)) {
+                                    new SimpleDialog(
+                                                    ApplyActivity.this,
+                                                    "DELETE",
+                                                    this,
+                                                    "Delete?",
+                                                    "Execute deletion of file '" + selection + "'")
+                                            .show();
+                                    fileToDelete = selection;
+                                    return;
+                                } else if ("DELETE".equals(identifier)) {
+                                    suCommands.moveFile(fileToDelete, "/sdcard/Download");
+                                    ApplyActivity.this.listViewLogArrayAdapter.add(
+                                            fileToDelete + " deleted");
+                                    // no return... continue
+                                } else {
+                                    ApplyActivity.this.listViewLogArrayAdapter.add(
+                                            "no free space on vendor partition");
+                                    new SimpleDialog(
+                                                    ApplyActivity.this,
+                                                    "SELECT_DEL",
+                                                    this,
+                                                    "Not enough free space on vendor partition",
+                                                    "Please select system app for deletion...")
+                                            .show();
+                                    return;
+                                }
+                            }
+
+                            String pathBackupFile = FileUtil.getFilePathQbListBackupCopy();
+                            suCommands.copyAndChmod(
+                                    FileUtil.getFilePathQbList(), pathBackupFile, "777");
+                            ApplyActivity.this.listViewLogArrayAdapter.add(
+                                    "created backup " + pathBackupFile);
+
+                            File file = new File(pathBackupFile);
+                            if (!file.exists() || file.length() == 0) {
+                                ApplyActivity.this.listViewLogArrayAdapter.add(
+                                        "Validation of " + pathBackupFile + " failed");
+                                return;
+                            }
+
+                            suCommands.copyAndChmod(fileModPath, FileUtil.getFilePathQbList(), "644");
+                            ApplyActivity.this.listViewLogArrayAdapter.add(
+                                    "overwritten " + FileUtil.getFilePathQbList());
+
+                        } catch (SuCommands.SuCommandException ex) {
+                            ApplyActivity.this.listViewLogArrayAdapter.add(ex.getMessage());
+                        }
+                    }
+
+                    try {
+                        FileUtil.allowIgnoreWakelocks();
+                    } catch (FileUtil.SetWakelockException ex) {
+                        ApplyActivity.this.listViewLogArrayAdapter.addAll(FileUtil.getLog());
+                        ApplyActivity.this.listViewLogArrayAdapter.add(ex.getMessage());
+                        return;
+                    }
+
+                    FileUtil.clearPackagesSelectedByUser();
+                    ApplyActivity.this.listViewLogArrayAdapter.addAll(FileUtil.getLog());
+                    recyclerView.setVisibility(View.GONE);
+                }
+            };
+
     @Override // android.view.View.OnClickListener
     public void onClick(View view) {
         switch (view.getId()) {
@@ -219,68 +331,10 @@ public class ApplyActivity extends AppCompatActivity implements View.OnClickList
                 } else {
                     new SimpleDialog(
                                     this,
-                                    new SimpleDialog.SimpleDialogCallbacks() { // from class:
-                                        // com.thf.sleepconfigurator.ApplyActivity.1
-                                        @Override // com.thf.sleepconfigurator.utils.SimpleDialog.SimpleDialogCallbacks
-                                        public void onClick(boolean confirm) {
-                                            boolean fileMod;
-                                            ApplyActivity.this.listViewLogArrayAdapter.clear();
-                                            if (!confirm) {
-                                                ApplyActivity.this.listViewLogArrayAdapter.add(
-                                                        "cancelled by user");
-                                                return;
-                                            }
-                                            try {
-                                                fileMod = FileUtil.modifyWorkingConfigFile();
-                                            } catch (FileUtil.ModifyFileException ex) {
-                                                ApplyActivity.this.listViewLogArrayAdapter.addAll(
-                                                        FileUtil.getLog());
-                                                ApplyActivity.this.listViewLogArrayAdapter.add(
-                                                        ex.getMessage());
-                                                return;
-                                            }
-
-                                            try {
-                                                FileUtil.allowIgnoreWakelocks();
-                                            } catch (FileUtil.SetWakelockException ex) {
-                                                ApplyActivity.this.listViewLogArrayAdapter.addAll(
-                                                        FileUtil.getLog());
-                                                ApplyActivity.this.listViewLogArrayAdapter.add(
-                                                        ex.getMessage());
-                                                 return;
-                                            }
-
-                                            if (fileMod) {
-                                                try {
-                                                    FileUtil.createBackup();
-                                                } catch (FileUtil.BackupCopyException ex) {
-                                                    ApplyActivity.this.listViewLogArrayAdapter.addAll(
-                                                        FileUtil.getLog());
-                                                    ApplyActivity.this.listViewLogArrayAdapter.add(
-                                                            ex.getMessage());
-                                                    return;
-                                                }
-                                                
-                                                try {
-                                                    FileUtil.overwriteQbList();
-                                                } catch (FileUtil.OverwriteQbListException ex) {
-                                                    ApplyActivity.this.listViewLogArrayAdapter.addAll(
-                                                        FileUtil.getLog());
-                                                    ApplyActivity.this.listViewLogArrayAdapter.add(
-                                                            ex.getMessage());
-                                                    return;
-                                                }
-                                            }
-                                            
-                                            FileUtil.clearPackagesSelectedByUser();
-
-                                            ApplyActivity.this.listViewLogArrayAdapter.addAll(
-                                                    FileUtil.getLog());
-                                        }
-                                    },
+                                    "INIT",
+                                    simpleDialogCallbacks,
                                     "Apply changes to config file?",
-                                    "App will create a backup copy of configuration file.",
-                                    true)
+                                    "App will create a backup copy of configuration file.")
                             .show();
                     return;
                 }
